@@ -1,0 +1,12 @@
+# kind cluster config for BrowserMesh.
+# extraPortMappings exposes the control plane's NodePort (30080) on the host so
+# the dashboard / drivers reach it without kubectl port-forward.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: browsermesh
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 30080
+    hostPort: 30080
+    protocol: TCP

@@ -1,0 +1,18 @@
+[project]
+name = "browsermesh-examples"
+version = "0.1.0"
+description = "BrowserMesh examples: drive a remote browser over CDP / with browser-use"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "websockets>=12",
+    "httpx>=0.27",
+    "browser-use>=0.5",
+    "openai>=1.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: browser-control
+  namespace: browser
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: browser-control
+  namespace: browser
+rules:
+# Read browser Pods so the gateway can reach them (IP lookup).
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+# Declare / remove Browser custom resources (the operator turns them into Pods).
+- apiGroups: ["browsermesh.dev"]
+  resources: ["browsers"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: browser-control
+  namespace: browser
+subjects:
+- kind: ServiceAccount
+  name: browser-control
+  namespace: browser
+roleRef:
+  kind: Role
+  name: browser-control
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browser-control
+  namespace: browser
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: browser-control
+  template:
+    metadata:
+      labels:
+        app: browser-control
+    spec:
+      serviceAccountName: browser-control
+      containers:
+      - name: control
+        image: browser-control:v1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BROWSER_NAMESPACE
+          value: browser
+        ports:
+        - containerPort: 8000
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: browser-control
+  namespace: browser
+spec:
+  type: NodePort
+  selector:
+    app: browser-control
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30080

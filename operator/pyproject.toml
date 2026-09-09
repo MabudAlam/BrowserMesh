@@ -1,0 +1,16 @@
+[project]
+name = "browsermesh-operator"
+version = "1.0.0"
+description = "Kopf controller that reconciles Browser custom resources into Pods"
+requires-python = ">=3.12"
+dependencies = [
+    "kopf>=1.37",
+    "kubernetes>=30.0",
+    "pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100

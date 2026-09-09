@@ -1,0 +1,21 @@
+[project]
+name = "browsermesh-control"
+version = "2.0.0"
+description = "BrowserMesh control plane: browser Pod lifecycle + CDP/VNC gateway"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "websockets>=12",
+    "kubernetes>=30.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.9"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,90 @@
+# Deploy the Browser operator in the cluster.
+# It needs to watch/list Browser objects AND create/read the Pods that back them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: browser-operator
+  namespace: browser
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: browser-operator
+  namespace: browser
+rules:
+# Own the browser Pods.
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+# Watch Browser objects and update their /status subresource.
+- apiGroups: ["browsermesh.dev"]
+  resources: ["browsers", "browsers/status"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: browser-operator
+  namespace: browser
+subjects:
+- kind: ServiceAccount
+  name: browser-operator
+  namespace: browser
+roleRef:
+  kind: Role
+  name: browser-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+# kopf lists Browser objects at cluster scope, so grant that cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: browser-operator-browsers
+rules:
+# The Browser custom resource (the operator reconciles it).
+- apiGroups: ["browsermesh.dev"]
+  resources: ["browsers"]
+  verbs: ["get", "list", "watch"]
+# kopf's peer/discovery also lists CRDs to learn which kinds exist.
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: browser-operator-browsers
+subjects:
+- kind: ServiceAccount
+  name: browser-operator
+  namespace: browser
+roleRef:
+  kind: ClusterRole
+  name: browser-operator-browsers
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browser-operator
+  namespace: browser
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: browser-operator
+  template:
+    metadata:
+      labels:
+        app: browser-operator
+    spec:
+      serviceAccountName: browser-operator
+      containers:
+      - name: operator
+        image: browser-operator:v1
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 64Mi
+          limits:
+            memory: 256Mi

@@ -1,0 +1,29 @@
+# --- Python / uv ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- Node / Next.js (dashboard) ---
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Environment ---
+.env
+.env.*
+!.env.example
+
+# --- Logs / temp / OS ---
+logs/
+*.log
+.DS_Store
+tmp/
+
+# --- Local tooling ---
+.idea/
+.vscode/
