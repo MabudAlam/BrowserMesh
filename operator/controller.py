@@ -8,6 +8,7 @@
 #     Browser automatically garbage-collects the Pod (no manual cleanup needed)
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 import kopf
 import kubernetes
@@ -112,6 +113,30 @@ def _set_status(namespace: str, name: str, patch: dict) -> None:
         logger.warning("status update failed for %s: %s", name, e)
 
 
+def _delete_browser(namespace: str, name: str) -> None:
+    """Delete the Browser (the Pod is garbage-collected via its ownerReference)."""
+    custom = kubernetes.client.CustomObjectsApi()
+    try:
+        custom.delete_namespaced_custom_object(CRD_GROUP, CRD_VERSION, namespace, CRD_PLURAL, name)
+    except kubernetes.client.rest.ApiException as e:
+        if e.status != 404:
+            logger.warning("delete failed for %s: %s", name, e)
+
+
+def _expired(meta: dict, timeout_seconds: int) -> bool:
+    """True if the Browser has outlived its timeout (0 = never expires)."""
+    if timeout_seconds <= 0:
+        return False
+    created = meta.get("creationTimestamp")
+    if not created:
+        return False
+    try:
+        created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return datetime.now(timezone.utc) >= created_at + timedelta(seconds=timeout_seconds)
+
+
 @kopf.timer(CRD_GROUP, CRD_VERSION, CRD_PLURAL, interval=3.0)
 def reconcile(body, spec, meta, namespace, **kwargs):
     """Periodic convergence loop (the core of the operator).
@@ -120,7 +145,16 @@ def reconcile(body, spec, meta, namespace, **kwargs):
     """
     name = meta["name"]
     engine = (spec or {}).get("type", "cloak")
+    timeout_seconds = int((spec or {}).get("timeoutSeconds", 0) or 0)
     uid = meta.get("uid", "")
+
+    # Auto-destroy: if the Browser outlived its timeout, remove it. The Pod is
+    # garbage-collected via its ownerReference, so on-demand browsers never leak.
+    if _expired(meta, timeout_seconds):
+        logger.info("Browser %s expired after %ss; deleting", name, timeout_seconds)
+        _set_status(namespace, name, {"phase": "Expired"})
+        _delete_browser(namespace, name)
+        return None
 
     pod_body = _pod_spec(name, namespace, engine, uid)
     phase = _ensure_pod(name, namespace, pod_body)
@@ -134,6 +168,9 @@ def reconcile(body, spec, meta, namespace, **kwargs):
         pod = None
 
     status = {"phase": phase, "type": engine}
+    if timeout_seconds > 0 and meta.get("creationTimestamp"):
+        created_at = datetime.fromisoformat(meta["creationTimestamp"].replace("Z", "+00:00"))
+        status["expiresAt"] = (created_at + timedelta(seconds=timeout_seconds)).isoformat()
     if pod is not None and pod_ip:
         status["phase"] = "Running"
         status["podIP"] = pod_ip
