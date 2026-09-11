@@ -86,13 +86,51 @@ rather than a deployment — Pods are created on demand.
 
 ---
 
+## Auth (single admin + API keys)
+
+The control service has a built-in, contained auth system: one admin account
+(email + password) and any number of API keys, stored in SQLite on a PVC.
+
+```bash
+# 1) create the admin account (once)
+curl -X POST http://127.0.0.1:30080/auth/register -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"changeme123"}'
+
+# 2) log in (stores a session cookie)
+curl -c cookies.txt -X POST http://127.0.0.1:30080/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"changeme123"}'
+
+# 3) mint an API key for the SDK/drivers (plaintext shown once, also viewable later)
+curl -b cookies.txt -X POST http://127.0.0.1:30080/keys -H 'Content-Type: application/json' -d '{"name":"quickcrawl"}'
+curl -b cookies.txt http://127.0.0.1:30080/keys                 # list (masked)
+curl -b cookies.txt http://127.0.0.1:30080/keys/1/reveal        # view the key again
+curl -b cookies.txt -X DELETE http://127.0.0.1:30080/keys/1     # revoke (soft)
+curl -b cookies.txt -X DELETE "http://127.0.0.1:30080/keys/1?permanent=true"  # delete permanently
+```
+
+**Enforcement is off by default** (self-hosted, localhost). To require a session
+cookie or `Authorization: Bearer bmsk_...` key on `/browsers*`, set
+`BROWSERMESH_REQUIRE_AUTH=true` in the control Deployment (or env) and restart.
+API clients then send:
+
+```bash
+curl -H "Authorization: Bearer bmsk_..." http://127.0.0.1:30080/browsers
+```
+
+The browser VNC WebSocket can't send headers, so the dashboard mints a
+short-lived viewer token via `POST /browsers/{id}/viewer-token` and appends
+`?token=...` to the ws URL. CDP clients use the API key.
+
+---
+
 ## Everyday usage (the app, not deploys)
 
 ```bash
 # Create / list / delete a browser (through the API, like the dashboard)
-curl -X POST http://127.0.0.1:30080/browsers -H 'Content-Type: application/json' -d '{"type":"cloak"}'
+# timeout_seconds auto-destroys the browser after N seconds (omit -> 20 min default).
+curl -X POST http://127.0.0.1:30080/browsers -H 'Content-Type: application/json' -d '{"type":"cloak","timeout_seconds":300}'
 curl http://127.0.0.1:30080/browsers
-curl -X DELETE http://127.0.0.1:30080/browsers/<id>
+curl -X DELETE http://127.0.0.1:30080/browsers/<id>            # delete (Pod GC'd)
 
 # Or via kubectl directly
 kubectl apply -f - <<'EOF'

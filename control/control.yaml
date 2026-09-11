@@ -1,4 +1,25 @@
 apiVersion: v1
+kind: Secret
+metadata:
+  name: browsermesh-auth
+  namespace: browser
+type: Opaque
+stringData:
+  # CHANGE THIS in production. Signs session cookies + viewer tokens.
+  session-secret: "dev-insecure-change-me"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: browsermesh-data
+  namespace: browser
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: browser-control
@@ -56,9 +77,27 @@ spec:
         env:
         - name: BROWSER_NAMESPACE
           value: browser
+        # SQLite lives on the PVC so the admin account + API keys persist.
+        - name: BROWSERMESH_DB
+          value: /data/browsermesh.db
+        # Require a session cookie or API key on /browsers*.
+        - name: BROWSERMESH_REQUIRE_AUTH
+          value: "true"
+        - name: BROWSERMESH_SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: browsermesh-auth
+              key: session-secret
         ports:
         - containerPort: 8000
           name: http
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: browsermesh-data
 ---
 apiVersion: v1
 kind: Service
