@@ -5,10 +5,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .db import init_db
 from .models import ErrorResponse
 from .routes import router
+from .routes_auth import auth_router, keys_router
 
 app = FastAPI(title="BrowserMesh control plane", version="2.0")
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    """Create the SQLite tables for users/keys if they don't exist yet."""
+    init_db()
 
 # Allow the dashboard (different origin) to call this API in local dev.
 app.add_middleware(
@@ -35,3 +43,5 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
 
 
 app.include_router(router)
+app.include_router(auth_router)
+app.include_router(keys_router)

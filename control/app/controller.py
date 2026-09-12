@@ -6,7 +6,15 @@ import httpx
 from fastapi import HTTPException
 from kubernetes import client, config
 
-from .config import CDP_PORT, CRD_GROUP, CRD_PLURAL, CRD_VERSION, NAMESPACE, PROVIDERS
+from .config import (
+    CDP_PORT,
+    CRD_GROUP,
+    CRD_PLURAL,
+    CRD_VERSION,
+    DEFAULT_TIMEOUT_SECONDS,
+    NAMESPACE,
+    PROVIDERS,
+)
 from .models import (
     BrowserCreated,
     BrowserInfo,
@@ -49,17 +57,24 @@ def _browser_name(browser_id: str) -> str:
     return f"br-{browser_id}"
 
 
-def create_browser(browser_type: str = "cloak") -> BrowserCreated:
-    """Declare a new Browser. The operator reconciles it into a Pod."""
+def create_browser(browser_type: str = "cloak", timeout_seconds: int = 0) -> BrowserCreated:
+    """Declare a new Browser. The operator reconciles it into a Pod.
+
+    `timeout_seconds` (0 = default) makes the operator auto-destroy the browser
+    after that long, so on-demand browsers can never leak.
+    """
     if browser_type not in PROVIDERS:
         raise HTTPException(400, f"unknown browser type '{browser_type}' (known: {list(PROVIDERS)})")
+
+    # Fall back to the platform default (20 min) when the caller doesn't pick one.
+    effective_timeout = timeout_seconds if timeout_seconds > 0 else DEFAULT_TIMEOUT_SECONDS
 
     browser_id = str(uuid.uuid4())[:8]
     name = _browser_name(browser_id)
     manifest = BrowserManifest(
         apiVersion=f"{CRD_GROUP}/{CRD_VERSION}",
         metadata=ObjectMeta(name=name, namespace=NAMESPACE),
-        spec=BrowserSpec(type=browser_type),
+        spec=BrowserSpec(type=browser_type, timeoutSeconds=effective_timeout),
     )
     try:
         _custom().create_namespaced_custom_object(
@@ -106,6 +121,7 @@ def _describe(cr: dict) -> BrowserInfo:
         pod_ip=status.get("podIP"),
         cdp_url=f"/browsers/{browser_id}/cdp",
         vnc_url=f"/browsers/{browser_id}/vnc",
+        expires_at=status.get("expiresAt"),
     )
 
 
