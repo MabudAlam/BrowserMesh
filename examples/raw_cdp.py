@@ -9,16 +9,20 @@ Run from anywhere with a running BrowserMesh:
 """
 import asyncio
 import json
+import os
 import time
 
 import requests
 import websockets
 
 API_URL = "http://127.0.0.1:30080"
+# Set BROWSERMESH_API_KEY when the server has auth enabled.
+API_KEY = os.environ.get("BROWSERMESH_API_KEY", "")
+HEADERS = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
 
 
 def create_browser() -> str:
-    resp = requests.post(API_URL + "/browsers", json={"type": "cloak"}, timeout=30)
+    resp = requests.post(API_URL + "/browsers", json={"type": "cloak"}, headers=HEADERS, timeout=30)
     resp.raise_for_status()
     return resp.json()["browser_id"]
 
@@ -27,10 +31,13 @@ def wait_ready(browser_id: str, timeout: int = 120) -> str:
     """Poll until Running; return the browser-level CDP websocket url."""
     start = time.time()
     while time.time() - start < timeout:
-        b = requests.get(f"{API_URL}/browsers/{browser_id}", timeout=30).json()
+        b = requests.get(f"{API_URL}/browsers/{browser_id}", headers=HEADERS, timeout=30).json()
         if b.get("status") == "Running" and b.get("cdp_url"):
             host = API_URL.split("//")[1]
-            return f"ws://{host}{b['cdp_url']}"
+            url = f"ws://{host}{b['cdp_url']}"
+            if API_KEY:
+                url += f"?api_key={API_KEY}"  # WS can't send headers from some clients
+            return url
         time.sleep(2)
     raise TimeoutError(f"browser {browser_id} not ready")
 
@@ -84,7 +91,7 @@ async def main() -> None:
         print("cdp", ws_url)
         await drive(ws_url)
     finally:
-        requests.delete(f"{API_URL}/browsers/{bid}", timeout=10)
+        requests.delete(f"{API_URL}/browsers/{bid}", headers=HEADERS, timeout=10)
 
 
 if __name__ == "__main__":

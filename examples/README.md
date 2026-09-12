@@ -25,8 +25,13 @@ uv run python raw_cdp.py
 
 # 2. browser_use_agent.py — an AI agent driving a BrowserMesh browser
 export OPENAI_API_KEY="sk-..."          # read by ChatOpenAI
+export BROWSERMESH_API_KEY="bmsk_..."   # create one in the dashboard (/keys)
 uv run python browser_use_agent.py
 ```
+
+> The browser-use example uses the **BrowserMesh Python SDK** (`browsermesh`),
+> added as a path dependency (`../sdk/python`). The SDK requires both the base
+> URL and an API key.
 
 ## `raw_cdp.py`
 Uses only `requests` + `websockets`. Creates a browser, navigates to

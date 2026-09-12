@@ -306,11 +306,23 @@ wheels = [
 ]
 
 [[package]]
+name = "browsermesh"
+version = "0.1.0"
+source = { editable = "../sdk/python" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.27" }]
+
+[[package]]
 name = "browsermesh-examples"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "browser-use" },
+    { name = "browsermesh" },
     { name = "httpx" },
     { name = "openai" },
     { name = "requests" },
@@ -320,6 +332,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "browser-use", specifier = ">=0.5" },
+    { name = "browsermesh", editable = "../sdk/python" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "openai", specifier = ">=1.0" },
     { name = "requests", specifier = ">=2.31" },
@@ -5322,8 +5335,8 @@ name = "uvicorn"
 version = "0.52.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click" },
-    { name = "h11" },
+    { name = "click", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
+    { name = "h11", marker = "python_full_version != '3.12.*' or sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f2/0f/3f86e61397dd33bf2ccf28188c40db6a740658aeebbbf6e7dbc101a1f487/uvicorn-0.52.4.tar.gz", hash = "sha256:73acfee47a0b133c5de13d219492d62d8a31e935f4fe6e41a232451a15379f86", size = 100627, upload-time = "2026-08-19T06:27:41.821Z" }
 wheels = [
