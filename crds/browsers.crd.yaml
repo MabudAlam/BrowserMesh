@@ -38,18 +38,27 @@ spec:
                 type:
                   type: string
                   default: "cloak"
+                # Auto-destroy after this many seconds. The operator deletes the
+                # Browser once it ages past this, so an on-demand browser can
+                # never leak if its client dies. Defaults to 20 minutes.
+                timeoutSeconds:
+                  type: integer
+                  minimum: 0
+                  default: 1200
               required:
                 - type
             status:
               type: object
               properties:
                 phase:
-                  type: string # Pending | Running | Failed
+                  type: string # Pending | Running | Failed | Expired
                 podIP:
                   type: string
                 cdpUrl:
                   type: string
                 vncUrl:
+                  type: string
+                expiresAt:
                   type: string
               # Keep unknown fields so the operator can grow status freely.
               x-kubernetes-preserve-unknown-fields: true
