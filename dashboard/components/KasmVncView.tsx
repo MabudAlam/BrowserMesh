@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ClipboardCopy, Loader2, Maximize2, Minimize2, X } from "lucide-react"
 import { vncWsUrl, cdpWsUrl } from "@/lib/mgr"
+import { viewerToken } from "@/lib/auth"
 
 interface KasmVncViewProps {
   profileId: string
@@ -46,9 +47,18 @@ export function KasmVncView({ profileId, profileName, onClose }: KasmVncViewProp
 
       const el = containerRef.current
       if (!el) return
+      // The VNC WebSocket can't send headers; fetch a short-lived viewer token.
+      let url = vncWsUrl(profileId)
+      try {
+        const token = await viewerToken(profileId)
+        if (token) url += `?token=${encodeURIComponent(token)}`
+      } catch {
+        /* server may have auth disabled — connect without a token */
+      }
+      if (cancelled) return
       let rfb: any
       try {
-        rfb = new RFB(el, vncWsUrl(profileId), { wsProtocols: ["binary"] })
+        rfb = new RFB(el, url, { wsProtocols: ["binary"] })
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Failed to start viewer")
         schedule()

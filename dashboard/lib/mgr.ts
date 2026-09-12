@@ -22,6 +22,7 @@ const CONTROL_WS = "ws://127.0.0.1:30080"
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
+    credentials: "same-origin",
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   })
@@ -49,8 +50,10 @@ export async function listBrowsers(): Promise<Browser[]> {
   return (r.browsers || []).map(norm)
 }
 
-export async function createBrowser(type = "cloak"): Promise<Browser> {
-  const b = await req<any>("/browsers", { method: "POST", body: JSON.stringify({ type }) })
+export async function createBrowser(type = "cloak", timeoutSeconds?: number): Promise<Browser> {
+  const body: Record<string, unknown> = { type }
+  if (timeoutSeconds && timeoutSeconds > 0) body.timeout_seconds = timeoutSeconds
+  const b = await req<any>("/browsers", { method: "POST", body: JSON.stringify(body) })
   return norm(b)
 }
 
