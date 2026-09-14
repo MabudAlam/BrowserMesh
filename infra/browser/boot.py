@@ -23,6 +23,14 @@ DISPLAY = ":0"
 KASM_HTTPD = os.environ.get("KASM_HTTPD", "/usr/share/kasmvnc/www")
 USER_DATA = os.environ.get("USER_DATA_DIR", "/tmp/browser-profile")
 
+# Single-port gateway (nginx) fronting VNC + CDP. Only needed on hosts that
+# expose one port (Cloud Run injects $PORT). Disabled in k8s, where the control
+# gateway reaches 6080/9223 directly. The listen port is fixed at 8080 in
+# gateway.conf (Cloud Run default; deploy with --port 8080).
+GATEWAY_ENABLED = os.environ.get(
+    "BROWSER_GATEWAY", "1" if os.environ.get("PORT") else "0"
+).lower() in ("1", "true", "yes")
+
 
 def start_xvnc() -> subprocess.Popen:
     """Start KasmVNC (Xvnc) owning display :0 with a websocket for noVNC."""
@@ -80,6 +88,13 @@ async def start_cdp_forward() -> asyncio.AbstractServer:
     return await asyncio.start_server(_forward, "0.0.0.0", CDP_EXT)
 
 
+def start_gateway() -> subprocess.Popen:
+    """Front KasmVNC + CDP on one port (see gateway.conf) for Cloud Run."""
+    nginx = shutil.which("nginx") or "/usr/sbin/nginx"
+    log.info("starting single-port gateway on :8080")
+    return subprocess.Popen([nginx, "-c", "/etc/nginx/nginx.conf"])
+
+
 async def launch_browser() -> None:
     from cloakbrowser import launch_persistent_context_async
 
@@ -114,18 +129,23 @@ async def main() -> None:
     signal.signal(signal.SIGINT, _handle_signal)
 
     xvnc = start_xvnc()
+    gateway = None
     try:
         await asyncio.sleep(1.5)
         if xvnc.poll() is not None:
             raise RuntimeError(f"Xvnc exited early (code {xvnc.returncode})")
         await launch_browser()
         server = await start_cdp_forward()
+        if GATEWAY_ENABLED:
+            gateway = start_gateway()
         log.info("CDP forward %s -> 127.0.0.1:%s; keeping pod alive", CDP_EXT, CDP_PORT)
         await stop.wait()
         log.info("shutting down")
         server.close()
         await server.wait_closed()
     finally:
+        if gateway is not None:
+            gateway.terminate()
         xvnc.terminate()
 
 
