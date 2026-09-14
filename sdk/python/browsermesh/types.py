@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 class Browser:
     """A browser and its operator-reported status."""
 
-    id: str
+    id: str = ""  # empty in serverless mode (no control plane)
     name: str = ""
     status: str = ""  # Pending | Running | Failed | Expired
     pod_ip: str = ""

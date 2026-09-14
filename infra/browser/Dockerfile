@@ -10,6 +10,7 @@ RUN apt-get update \
 
 COPY infra/browser/boot.py /boot.py
 COPY infra/browser/gateway.conf /etc/nginx/nginx.conf
+COPY infra/browser/watch.html /usr/share/browsermesh/watch.html
 
 # Fail the build if the gateway config is invalid.
 RUN mkdir -p /tmp/nginx-client-body /tmp/nginx-proxy /tmp/nginx-fastcgi \

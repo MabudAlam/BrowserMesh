@@ -10,8 +10,9 @@ set -euo pipefail
 CLUSTER=browsermesh
 NAMESPACE=browser
 CONTROL_URL=http://127.0.0.1:30080
-ADMIN_EMAIL=admin@browsermesh.local
-ADMIN_PASSWORD=changeme123
+# Local dev defaults; override with env for anything non-local.
+ADMIN_EMAIL="${BROWSERMESH_ADMIN_EMAIL:-admin@browsermesh.local}"
+ADMIN_PASSWORD="${BROWSERMESH_ADMIN_PASSWORD:-changeme123}"
 COOKIES=/tmp/browsermesh-cookies.txt
 TOTAL_STEPS=8
 

@@ -14,14 +14,17 @@ import (
 	"time"
 )
 
-// Client talks to a BrowserMesh control plane.
+// Client talks to a BrowserMesh control plane, or (in serverless mode) to a
+// single standalone Cloud Run browser.
 type Client struct {
-	baseURL string
-	apiKey  string
-	http    *http.Client
+	baseURL    string
+	apiKey     string
+	serverless bool
+	http       *http.Client
 }
 
-// NewClient builds a client. Both the base URL and the API key are required.
+// NewClient builds a control-plane client. Both the base URL and the API key
+// are required.
 //
 //	baseURL: e.g. "http://127.0.0.1:30080"
 //	apiKey:  a key created in the dashboard, e.g. "bmsk_..."
@@ -32,14 +35,36 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, errors.New("browsermesh: API key is required")
 	}
-	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 30 * time.Second},
-	}, nil
+	return newClient(baseURL, apiKey, false), nil
 }
 
-// do sends a JSON request to the control plane and decodes the response into out.
+// NewServerlessClient builds a client for a single Cloud Run browser. There is
+// no control plane (no create/list/delete): the service URL *is* one on-demand
+// browser. apiKey is optional — pass one only if the service requires auth.
+func NewServerlessClient(baseURL, apiKey string) (*Client, error) {
+	if strings.TrimSpace(baseURL) == "" {
+		return nil, errors.New("browsermesh: base URL is required")
+	}
+	return newClient(baseURL, apiKey, true), nil
+}
+
+func newClient(baseURL, apiKey string, serverless bool) *Client {
+	return &Client{
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		apiKey:     apiKey,
+		serverless: serverless,
+		http:       &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+func (c *Client) requireControlPlane() error {
+	if c.serverless {
+		return errors.New("browsermesh: not available in serverless mode (no control plane)")
+	}
+	return nil
+}
+
+// do sends a JSON request and decodes the response into out.
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var rdr io.Reader
 	if body != nil {
@@ -54,7 +79,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

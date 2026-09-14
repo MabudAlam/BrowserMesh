@@ -77,15 +77,19 @@ gcloud run deploy browsermesh-browser \
   --region "$REGION" \
   --port 8080 \
   --cpu 1 --memory 2Gi \
-  --concurrency 1 \
-  --min-instances 0 --max-instances 5 \
+  --concurrency 10 \
+  --min-instances 0 --max-instances 1 \
   --timeout 3600 \
   --no-cpu-throttling \
   --session-affinity \
   --no-allow-unauthenticated
 ```
 
-- `--concurrency 1` — one browser per instance (a browser is stateful).
+- `--concurrency 10 --max-instances 1` — **watchable single-use mode**: one
+  instance shared by the SDK's CDP connection and your viewer, so you can watch
+  the browser a script drives. For isolated one-browser-per-connection instead,
+  use `--concurrency 1 --max-instances 5` (but then a viewer gets its *own*
+  browser, not the one a script drives).
 - `--min-instances 0` — **scale to zero, $0 when idle**; a request cold-starts
   one browser.
 - `--timeout 3600` — max request/WebSocket lifetime (60 min).
@@ -103,9 +107,25 @@ URL=$(gcloud run services describe browsermesh-browser \
   --region "$REGION" --format='value(status.url)')
 ```
 
-**Live VNC:** open `$URL` in a browser (noVNC). If the service requires auth,
-use `gcloud run services proxy browsermesh-browser --region "$REGION"` and open
-`http://localhost:8080`.
+**Live view — open `$URL/watch`.** The container serves a self-contained viewer
+page (`watch.html`) that embeds the KasmVNC stream and shows status. It is the
+same container/browser CDP is driving — *provided the service is in watchable
+mode* (`--max-instances 1 --concurrency 10`, the `cloudbuild.yaml` default).
+
+> Under the hood: `/watch` is the viewer page, `/` is the KasmVNC noVNC client
+> it embeds, `/websockify` is the RFB stream (KasmVNC 4.0 requires the browser's
+> `Origin` header, which browsers send automatically). CDP is at `/json` +
+> `/devtools`.
+
+Why single-instance: Cloud Run cannot route a request to an existing instance.
+With `--concurrency 1 --max-instances 5`, opening the viewer starts a **new**
+container, so you'd watch a different browser than the one the SDK drives. With
+one instance and concurrency > 1, the SDK's CDP connection and your viewer share
+the same browser — that's what makes it watchable.
+
+If the service requires auth (`--no-allow-unauthenticated`), use
+`gcloud run services proxy browsermesh-browser --region "$REGION"` and open
+`http://localhost:8080/watch`.
 
 **CDP (Playwright):**
 
@@ -126,6 +146,17 @@ with sync_playwright() as p:
 
 ## Caveats
 
+- **One URL, not one URL per browser.** Cloud Run exposes a single service
+  endpoint; there is no per-browser address (no control plane). In **watchable
+  mode** (`--max-instances 1 --concurrency 10`) that's fine: one instance, one
+  browser, and `/watch` shows the browser a script drives. In **isolated mode**
+  (`--concurrency 1 --max-instances 5`) each connection gets its own browser and
+  you *cannot* watch a specific one — for per-browser viewing use the Kubernetes
+  control plane (`/browsers/{id}/vnc`).
+- **Cross-instance CDP mismatch.** With `--max-instances > 1`, a client's
+  `/json/version` and its CDP WebSocket can land on different instances, so the
+  browser id won't exist on the second → "unresponsive". Watchable mode
+  (`--max-instances 1`) avoids this.
 - **60-minute cap** per CDP/VNC WebSocket (Cloud Run request timeout max).
   Reconnect to continue.
 - **Cold start** ~ Chrome boot + Cloud Run (~5–15s); the first request after

@@ -1,7 +1,10 @@
 # browsermesh-go
 
-Small, dependency-free Go client for the [BrowserMesh](../../) control plane.
-Create a browser, drive it over CDP, and let the client clean it up.
+Small, dependency-free Go client for BrowserMesh. Two modes:
+
+- **Control plane** (Kubernetes): create a browser, drive it over CDP, let the
+  client clean it up.
+- **Serverless** (Cloud Run): drive a single on-demand browser at a service URL.
 
 ## Install
 
@@ -37,7 +40,7 @@ func main() {
 		Type:           "cloak",
 		TimeoutSeconds: 300, // auto-destroy safety net
 	}, func(b browsermesh.Browser) error {
-		cdp, err := client.CDPURL(b.ID) // ws://.../browsers/<id>/cdp?api_key=...
+		cdp, err := client.CDPURL(ctx, b.ID) // ws://.../browsers/<id>/cdp?api_key=...
 		if err != nil {
 			return err
 		}
@@ -49,6 +52,33 @@ func main() {
 	}
 }
 ```
+
+### Serverless mode (Cloud Run)
+
+A Cloud Run browser has no control plane: the service URL *is* one on-demand
+browser. Use `NewServerlessClient`; the API key is optional (only if the service
+requires auth). `WithBrowser` just waits until Chrome answers and calls fn.
+
+```go
+client, err := browsermesh.NewServerlessClient("https://browsermesh-browser-xxxx.run.app", "")
+if err != nil {
+	log.Fatal(err)
+}
+ctx := context.Background()
+
+	err = client.WithBrowser(ctx, browsermesh.CreateOptions{}, func(b browsermesh.Browser) error {
+		vnc, _ := client.VNCURL()          // https://.../watch  (open this to watch)
+		cdp, err := client.CDPURL(ctx, "") // wss://.../devtools/browser/<id> (id ignored)
+		if err != nil {
+			return err
+		}
+		fmt.Println("watch:", vnc, "drive:", cdp)
+		return nil
+	})
+```
+
+`Create`, `List`, `Get`, `Delete`, and `ViewerToken` return an error in
+serverless mode.
 
 ### Low-level methods
 

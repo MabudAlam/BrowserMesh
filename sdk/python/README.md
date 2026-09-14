@@ -1,7 +1,10 @@
 # browsermesh (Python SDK)
 
-Small, dependency-light Python client for the [BrowserMesh](../../) control
-plane. Create a browser, drive it over CDP, and let the client clean it up.
+Small, dependency-light Python client for BrowserMesh. Two modes:
+
+- **Control plane** (Kubernetes): create a browser, drive it over CDP, let the
+  client clean it up.
+- **Serverless** (Cloud Run): drive a single on-demand browser at a service URL.
 
 ## Install
 
@@ -28,8 +31,29 @@ from browsermesh import AsyncClient, CreateOptions
 
 async with AsyncClient("http://127.0.0.1:30080", "bmsk_...") as client:
     async with client.with_browser(CreateOptions(type="cloak")) as browser:
-        cdp = client.cdp_url(browser.id)
+        cdp = await client.cdp_url(browser.id)
 ```
+
+### Serverless mode (Cloud Run)
+
+A Cloud Run browser has no control plane: the service URL *is* one on-demand
+browser. Pass `serverless=True`; the API key is optional (only if the service
+requires auth). There is nothing to create or delete — `with_browser` just waits
+until Chrome answers and yields the endpoint.
+
+```python
+from browsermesh import Client
+
+with Client("https://browsermesh-browser-xxxx.run.app", serverless=True) as client:
+    with client.with_browser() as browser:
+        print("view the live feed at", browser.vnc_url)   # https://.../watch
+        print("drive it over CDP at", browser.cdp_url)    # wss://.../devtools/browser/<id>
+```
+
+`client.cdp_url()` (no id) resolves the WebSocket URL from the container's
+`/json/version`; `client.vnc_url()` returns the self-contained viewer page
+(`/watch`, which streams the browser). `create`, `list`, `get`, `delete`, and
+`viewer_token` raise `APIError` in serverless mode.
 
 ### Low-level methods
 

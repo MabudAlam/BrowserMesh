@@ -1,45 +1,48 @@
-# BrowserMesh + Browser-Use demo
+# BrowserMesh + Browser-Use demo (serverless / Cloud Run)
 #
-# Runs an AI browser agent against a browser provisioned by BrowserMesh, using
-# the BrowserMesh Python SDK for the browser lifecycle.
+# Same agent as browser_use_agent.py, but against a single on-demand Cloud Run
+# browser instead of the Kubernetes control plane. There is nothing to create or
+# delete: the service URL *is* one browser, and Cloud Run scales the instance
+# down when the connection ends.
 #
 # Flow (handled by the SDK's `with_browser`):
-#   create browser -> wait until Running -> run the agent over CDP -> delete it
+#   wait until Chrome's CDP answers -> run the agent over CDP
 #
 # Requires:
-#   * BrowserMesh running locally (control plane on http://127.0.0.1:30080)
-#   * a BrowserMesh API key in BROWSERMESH_API_KEY (create one in the dashboard)
+#   * a deployed Cloud Run browser (see deploy/cloudrun.md) — its URL in
+#     BROWSERMESH_URL
 #   * OPENAI_API_KEY for the LLM
 #   * `uv sync` in examples/ (installs browser-use, openai, browsermesh)
+#
+# Watch the agent live: open BROWSERMESH_URL/watch in a browser.
 
 import asyncio
 import os
 
-from browsermesh import AsyncClient, CreateOptions
+from browsermesh import AsyncClient
 from browser_use import Agent, BrowserSession
 from browser_use.llm import ChatOpenAI
 
-API_URL = os.environ.get("BROWSERMESH_API_URL", "http://127.0.0.1:30080")
-API_KEY = os.environ.get("BROWSERMESH_API_KEY", "")
-BROWSER_TYPE = os.environ.get("BROWSER_TYPE", "cloak")
+# Cloud Run service URL (e.g. https://browsermesh-browser-xxxx.run.app).
+URL = os.environ.get("BROWSERMESH_URL", "")
+# Optional: a Google identity token, only if the service requires auth
+# (--no-allow-unauthenticated). Public services need nothing here.
+TOKEN = os.environ.get("BROWSERMESH_TOKEN", "")
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
-# Auto-destroy safety net (seconds). 0 = server default (20 min).
-TIMEOUT_SECONDS = int(os.environ.get("BROWSERMESH_TIMEOUT", "600"))
 
 
 async def main() -> None:
-    if not API_KEY:
-        raise SystemExit("Set BROWSERMESH_API_KEY (create a key in the dashboard).")
+    if not URL:
+        raise SystemExit("Set BROWSERMESH_URL to your Cloud Run service URL.")
 
-    client = AsyncClient(API_URL, API_KEY)
+    client = AsyncClient(URL, TOKEN or None, serverless=True)
     try:
-        async with client.with_browser(
-            CreateOptions(type=BROWSER_TYPE, timeout_seconds=TIMEOUT_SECONDS)
-        ) as browser:
-            cdp_url = await client.cdp_url(browser.id)  # ws://.../cdp?api_key=...
-            print(f"Browser {browser.id} ready; driving over CDP")
+        async with client.with_browser() as browser:
+            # The viewer is built into the container; open it to watch the run.
+            print(f"Live feed: {browser.vnc_url}")
+            print(f"Driving over CDP: {browser.cdp_url}")
 
-            session = BrowserSession(cdp_url=cdp_url)
+            session = BrowserSession(cdp_url=browser.cdp_url)
             try:
                 agent = Agent(
                     task="Visit https://mabud.dev and https://dejan.works and extract the "
@@ -50,7 +53,7 @@ async def main() -> None:
                     llm=ChatOpenAI(model=MODEL),
                     browser_session=session,
                     use_vision=False,
-                    save_conversation_path="logs/portfolio",
+                    save_conversation_path="logs/portfolio_serverless",
                     extend_system_message=(
                         "Return a structured markdown summary per site with headings and "
                         "bullet lists, and cite the source URL for each section. Do not "

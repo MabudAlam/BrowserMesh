@@ -51,9 +51,13 @@ steps:
       - --port=8080
       - --cpu=1
       - --memory=2Gi
-      - --concurrency=1
+      # Watchable single-use mode: one instance, shared by the SDK's CDP
+      # connection and your viewer (open https://<service>/watch). For isolated
+      # one-browser-per-connection instead, use --concurrency=1 --max-instances=5
+      # (but then a viewer gets its own browser, not the one a script drives).
+      - --concurrency=10
       - --min-instances=0
-      - --max-instances=5
+      - --max-instances=1
       - --timeout=3600
       - --no-cpu-throttling
       - --session-affinity

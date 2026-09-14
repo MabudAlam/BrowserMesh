@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrowserMesh — live browser</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0b0d10; color: #e6e8eb;
+    font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid #1e2329; background: #0e1116;
+  }
+  header .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+  header .dot.live { background: #22c55e; }
+  header strong { font-weight: 600; }
+  header .status { color: #9aa4af; margin-left: auto; font-variant-numeric: tabular-nums; }
+  iframe { flex: 1; width: 100%; border: 0; background: #000; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <strong>BrowserMesh</strong>
+    <span>live browser</span>
+    <span class="status" id="status">starting…</span>
+  </header>
+  <!-- The live desktop is KasmVNC's noVNC client, served at /. Same container,
+       same browser that CDP is driving. -->
+  <iframe id="view" src="/" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+  <script>
+    const dot = document.getElementById("dot");
+    const status = document.getElementById("status");
+    async function tick() {
+      try {
+        const v = await (await fetch("/json/version", { cache: "no-store" })).json();
+        dot.classList.add("live");
+        status.textContent = (v.Browser || "browser") + " · live";
+      } catch {
+        dot.classList.remove("live");
+        status.textContent = "browser starting…";
+      }
+    }
+    tick();
+    setInterval(tick, 3000);
+  </script>
+</body>
+</html>

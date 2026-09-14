@@ -79,11 +79,59 @@ func TestAPIError(t *testing.T) {
 
 func TestCDPURL(t *testing.T) {
 	c, _ := NewClient("http://127.0.0.1:30080", "bmsk_abc")
-	u, err := c.CDPURL("xyz")
+	u, err := c.CDPURL(context.Background(), "xyz")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(u, "ws://127.0.0.1:30080/browsers/xyz/cdp?") || !strings.Contains(u, "api_key=bmsk_abc") {
 		t.Fatalf("unexpected CDP url: %s", u)
+	}
+}
+
+func TestNewServerlessClient(t *testing.T) {
+	if _, err := NewServerlessClient("", ""); err == nil {
+		t.Fatal("expected error for empty base URL")
+	}
+	// apiKey is optional in serverless mode.
+	if _, err := NewServerlessClient("https://run.example", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestServerlessResolveAndVNC(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /json/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"Browser":"Chrome/146","webSocketDebuggerUrl":"wss://run.example/devtools/browser/abc"}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c, err := NewServerlessClient(srv.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	cdp, err := c.CDPURL(ctx, "") // id ignored in serverless
+	if err != nil || cdp != "wss://run.example/devtools/browser/abc" {
+		t.Fatalf("cdp: %v %q", err, cdp)
+	}
+
+	vnc, err := c.VNCURL()
+	if err != nil || vnc != srv.URL+"/watch" {
+		t.Fatalf("vnc: %v %q", err, vnc)
+	}
+
+	b, err := c.WaitReady(ctx, "")
+	if err != nil || b.Status != "Running" || b.CDPURL != cdp {
+		t.Fatalf("waitReady: %v %+v", err, b)
+	}
+
+	// Lifecycle calls are rejected without a control plane.
+	if _, err := c.Create(ctx, CreateOptions{}); err == nil {
+		t.Fatal("expected Create to fail in serverless mode")
+	}
+	if err := c.Delete(ctx, "x"); err == nil {
+		t.Fatal("expected Delete to fail in serverless mode")
 	}
 }
