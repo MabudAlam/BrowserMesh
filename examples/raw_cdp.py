@@ -11,11 +11,20 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
 
 import requests
 import websockets
+from dotenv import load_dotenv
 
-API_URL = "http://127.0.0.1:30080"
+# Load the repo-root .env (BROWSERMESH_URL / BROWSERMESH_API_KEY).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+API_URL = (
+    os.environ.get("BROWSERMESH_API_URL")
+    or os.environ.get("BROWSERMESH_URL")
+    or "http://127.0.0.1:30080"
+)
 # Set BROWSERMESH_API_KEY when the server has auth enabled.
 API_KEY = os.environ.get("BROWSERMESH_API_KEY", "")
 HEADERS = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
@@ -40,6 +49,19 @@ def wait_ready(browser_id: str, timeout: int = 120) -> str:
             return url
         time.sleep(2)
     raise TimeoutError(f"browser {browser_id} not ready")
+
+
+def watch_url(browser_id: str) -> str:
+    """Mint a viewer token and return the noVNC websocket URL.
+
+    Open the dashboard (http://localhost:4003) and click View to watch, or point
+    a noVNC client at this URL.
+    """
+    resp = requests.post(f"{API_URL}/browsers/{browser_id}/viewer-token", headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    token = resp.json()["token"]
+    host = API_URL.split("//")[1]
+    return f"ws://{host}/browsers/{browser_id}/vnc?token={token}"
 
 
 async def drive(ws_url: str) -> None:
@@ -88,7 +110,8 @@ async def main() -> None:
     print("created", bid)
     try:
         ws_url = wait_ready(bid)
-        print("cdp", ws_url)
+        print("cdp  ", ws_url)
+        print("watch", watch_url(bid), " (dashboard: http://localhost:4003)")
         await drive(ws_url)
     finally:
         requests.delete(f"{API_URL}/browsers/{bid}", headers=HEADERS, timeout=10)

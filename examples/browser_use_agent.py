@@ -14,12 +14,22 @@
 
 import asyncio
 import os
+from pathlib import Path
 
-from browsermesh import AsyncClient, CreateOptions
+from dotenv import load_dotenv
+
+from browsermesh import BrowserMeshAsyncClient, BrowserMeshOptions
 from browser_use import Agent, BrowserSession
 from browser_use.llm import ChatOpenAI
 
-API_URL = os.environ.get("BROWSERMESH_API_URL", "http://127.0.0.1:30080")
+# Load the repo-root .env (BROWSERMESH_URL / BROWSERMESH_API_KEY / OPENAI_API_KEY).
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+API_URL = (
+    os.environ.get("BROWSERMESH_API_URL")
+    or os.environ.get("BROWSERMESH_URL")
+    or "http://127.0.0.1:30080"
+)
 API_KEY = os.environ.get("BROWSERMESH_API_KEY", "")
 BROWSER_TYPE = os.environ.get("BROWSER_TYPE", "cloak")
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
@@ -31,22 +41,26 @@ async def main() -> None:
     if not API_KEY:
         raise SystemExit("Set BROWSERMESH_API_KEY (create a key in the dashboard).")
 
-    client = AsyncClient(API_URL, API_KEY)
+    client = BrowserMeshAsyncClient(API_URL, API_KEY)
     try:
         async with client.with_browser(
-            CreateOptions(type=BROWSER_TYPE, timeout_seconds=TIMEOUT_SECONDS)
+            BrowserMeshOptions(type=BROWSER_TYPE, timeout_seconds=TIMEOUT_SECONDS)
         ) as browser:
-            cdp_url = await client.cdp_url(browser.id)  # ws://.../cdp?api_key=...
+            cdp_url = client.cdp_url(browser.id)  # ws://.../cdp?api_key=...
             print(f"Browser {browser.id} ready; driving over CDP")
+            # Watch live: open the dashboard (http://localhost:4003) and click
+            # View, or connect a noVNC client to the viewer URL below.
+            print(f"Watch live:      {await client.watch_url(browser.id)}")
+            print(f"Driving over CDP: {cdp_url}")
 
             session = BrowserSession(cdp_url=cdp_url)
             try:
                 agent = Agent(
-                    task="Visit https://mabud.dev and https://dejan.works and extract the "
-                    "portfolio information from each site. For every site collect: name and "
-                    "title, about/summary, work experience (roles, companies, dates), projects "
-                    "(name, description, link, technologies), skills, education, and "
-                    "contact/social links.",
+                    task="Visit BOTH https://mabud.dev and https://dejan.works — do not finish "
+                    "until you have visited both. For each site, open its projects page if there "
+                    "is one, and extract: name and title, about/summary, work experience (roles, "
+                    "companies, dates), projects (name, description, link, technologies), skills, "
+                    "education, and contact/social links (with their actual URLs).",
                     llm=ChatOpenAI(model=MODEL),
                     browser_session=session,
                     use_vision=False,
