@@ -17,8 +17,13 @@ export interface BrowserList {
   browsers: Browser[]
 }
 
-// Stable host port exposed via kind extraPortMappings -> NodePort (no port-forward).
-const CONTROL_WS = "ws://127.0.0.1:30080"
+// Control-plane REST is proxied same-origin via the Next rewrite (/api ->
+// BROWSERMESH_CONTROL_URL). VNC/CDP connect directly to the control gateway ws
+// (Next dev does not reliably proxy WebSockets), so this URL must be set too.
+//   NEXT_PUBLIC_BROWSERMESH_CONTROL_WS=ws://34.30.38.64:30080
+// (NEXT_PUBLIC_* is inlined at build time; set it before `npm run build`.)
+const CONTROL_WS =
+  process.env.NEXT_PUBLIC_BROWSERMESH_CONTROL_WS || "ws://127.0.0.1:30080"
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
