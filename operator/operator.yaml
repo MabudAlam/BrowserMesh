@@ -83,6 +83,13 @@ spec:
       - name: operator
         image: browser-operator:v1
         imagePullPolicy: IfNotPresent
+        # Optional: place browser Pods on a specific node pool (e.g. a GKE spot
+        # pool). Leave unset for kind/minikube. Example:
+        # env:
+        # - name: BROWSER_NODE_SELECTOR
+        #   value: '{"cloud.google.com/gke-nodepool":"browsers"}'
+        # - name: BROWSER_TOLERATIONS
+        #   value: '[{"key":"browsers","operator":"Equal","value":"true","effect":"NoSchedule"}]'
         resources:
           requests:
             memory: 64Mi

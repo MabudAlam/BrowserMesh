@@ -7,7 +7,9 @@
 #   - because the Pod carries an ownerReference to the Browser, deleting the
 #     Browser automatically garbage-collects the Pod (no manual cleanup needed)
 
+import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import kopf
@@ -20,8 +22,9 @@ CRD_PLURAL = "browsers"
 
 # Each engine maps to a Pod image. This is the browser-agnostic seam: add an
 # engine by adding its image here (and booting it headed on :0 with CDP).
+# Override the image (e.g. a registry path on GKE) with BROWSER_IMAGE_CLOAK.
 ENGINE_IMAGES = {
-    "cloak": "browser-pod:v1",
+    "cloak": os.environ.get("BROWSER_IMAGE_CLOAK", "browser-pod:v1"),
 }
 
 # Exposed ports inside the browser Pod (must match infra/browser/Dockerfile).
@@ -31,6 +34,11 @@ VNC_PORT = 6080  # KasmVNC websocket
 # Per-browser isolation budget.
 MEMORY_LIMIT = "2Gi"
 MEMORY_REQUEST = "1Gi"
+
+# Optional node placement for browser Pods (e.g. a cheap/spot node pool on GKE).
+# JSON env vars; empty by default so kind/minikube are unaffected.
+NODE_SELECTOR = json.loads(os.environ.get("BROWSER_NODE_SELECTOR", "") or "{}")
+TOLERATIONS = json.loads(os.environ.get("BROWSER_TOLERATIONS", "") or "[]")
 
 logger = logging.getLogger("browsermesh.operator")
 
@@ -66,6 +74,10 @@ def _pod_spec(name: str, namespace: str, engine: str, browser_uid: str) -> dict:
             ],
         },
         "spec": {
+            # Optional placement (BROWSER_NODE_SELECTOR / BROWSER_TOLERATIONS):
+            # e.g. pin browsers to a spot node pool on GKE.
+            **({"nodeSelector": NODE_SELECTOR} if NODE_SELECTOR else {}),
+            **({"tolerations": TOLERATIONS} if TOLERATIONS else {}),
             "containers": [
                 {
                     "name": "browser",
