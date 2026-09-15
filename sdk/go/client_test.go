@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-func TestNewClientValidation(t *testing.T) {
-	if _, err := NewClient("", "k"); err == nil {
+func TestNewBrowserMeshClientValidation(t *testing.T) {
+	if _, err := NewBrowserMeshClient("", "k"); err == nil {
 		t.Fatal("expected error for empty base URL")
 	}
-	if _, err := NewClient("http://x", ""); err == nil {
+	if _, err := NewBrowserMeshClient("http://x", ""); err == nil {
 		t.Fatal("expected error for empty API key")
 	}
-	if _, err := NewClient("http://x", "k"); err != nil {
+	if _, err := NewBrowserMeshClient("http://x", "k"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -36,13 +36,13 @@ func TestCreateGetDeleteAndAuth(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	c, err := NewClient(srv.URL, "bmsk_test")
+	c, err := NewBrowserMeshClient(srv.URL, "bmsk_test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
 
-	created, err := c.Create(ctx, CreateOptions{Type: "cloak"})
+	created, err := c.Create(ctx, BrowserMeshOptions{Type: "cloak"})
 	if err != nil || created.ID != "abc123" {
 		t.Fatalf("create: %v %+v", err, created)
 	}
@@ -66,7 +66,7 @@ func TestAPIError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, _ := NewClient(srv.URL, "bmsk_test")
+	c, _ := NewBrowserMeshClient(srv.URL, "bmsk_test")
 	_, err := c.Get(context.Background(), "nope")
 	apiErr, ok := err.(*APIError)
 	if !ok {
@@ -78,8 +78,8 @@ func TestAPIError(t *testing.T) {
 }
 
 func TestCDPURL(t *testing.T) {
-	c, _ := NewClient("http://127.0.0.1:30080", "bmsk_abc")
-	u, err := c.CDPURL(context.Background(), "xyz")
+	c, _ := NewBrowserMeshClient("http://127.0.0.1:30080", "bmsk_abc")
+	u, err := c.CDPURL("xyz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,50 +88,20 @@ func TestCDPURL(t *testing.T) {
 	}
 }
 
-func TestNewServerlessClient(t *testing.T) {
-	if _, err := NewServerlessClient("", ""); err == nil {
-		t.Fatal("expected error for empty base URL")
-	}
-	// apiKey is optional in serverless mode.
-	if _, err := NewServerlessClient("https://run.example", ""); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestServerlessResolveAndVNC(t *testing.T) {
+func TestWatchURL(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /json/version", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"Browser":"Chrome/146","webSocketDebuggerUrl":"wss://run.example/devtools/browser/abc"}`))
+	mux.HandleFunc("POST /browsers/abc/viewer-token", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"token":"vtok"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	c, err := NewServerlessClient(srv.URL, "")
+	c, _ := NewBrowserMeshClient(srv.URL, "bmsk_test")
+	u, err := c.WatchURL(context.Background(), "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-
-	cdp, err := c.CDPURL(ctx, "") // id ignored in serverless
-	if err != nil || cdp != "wss://run.example/devtools/browser/abc" {
-		t.Fatalf("cdp: %v %q", err, cdp)
-	}
-
-	vnc, err := c.VNCURL()
-	if err != nil || vnc != srv.URL+"/watch" {
-		t.Fatalf("vnc: %v %q", err, vnc)
-	}
-
-	b, err := c.WaitReady(ctx, "")
-	if err != nil || b.Status != "Running" || b.CDPURL != cdp {
-		t.Fatalf("waitReady: %v %+v", err, b)
-	}
-
-	// Lifecycle calls are rejected without a control plane.
-	if _, err := c.Create(ctx, CreateOptions{}); err == nil {
-		t.Fatal("expected Create to fail in serverless mode")
-	}
-	if err := c.Delete(ctx, "x"); err == nil {
-		t.Fatal("expected Delete to fail in serverless mode")
+	if !strings.HasPrefix(u, "ws://") || !strings.Contains(u, "/browsers/abc/vnc?") || !strings.Contains(u, "token=vtok") {
+		t.Fatalf("unexpected watch url: %s", u)
 	}
 }

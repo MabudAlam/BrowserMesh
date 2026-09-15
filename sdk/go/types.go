@@ -11,8 +11,8 @@ type Browser struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
-// CreateOptions configures a new browser.
-type CreateOptions struct {
+// BrowserMeshOptions configures a new browser.
+type BrowserMeshOptions struct {
 	Type           string // engine/provider, e.g. "cloak"
 	TimeoutSeconds int    // auto-destroy after N seconds; 0 = server default (20 min)
 }

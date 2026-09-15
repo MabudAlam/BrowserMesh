@@ -6,14 +6,8 @@ import (
 	"time"
 )
 
-// WaitReady waits until the browser is ready.
-//
-// Control plane: polls the Browser resource until it reports "Running".
-// Serverless: polls /json/version until Chrome's CDP answers.
-func (c *Client) WaitReady(ctx context.Context, id string) (Browser, error) {
-	if c.serverless {
-		return c.waitReadyServerless(ctx)
-	}
+// WaitReady polls the browser until it reports "Running", or the context ends.
+func (c *BrowserMeshClient) WaitReady(ctx context.Context, id string) (Browser, error) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -35,35 +29,12 @@ func (c *Client) WaitReady(ctx context.Context, id string) (Browser, error) {
 	}
 }
 
-func (c *Client) waitReadyServerless(ctx context.Context) (Browser, error) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		cdp, err := c.resolveCDP(ctx)
-		if err == nil {
-			return Browser{Status: "Running", CDPURL: cdp, VNCURL: c.baseURL + "/watch"}, nil
-		}
-		select {
-		case <-ctx.Done():
-			return Browser{}, ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
-// WithBrowser runs fn against a browser.
+// WithBrowser runs fn against a fresh browser and always cleans it up:
 //
-// Control plane: create -> WaitReady -> fn -> Delete (always cleans up).
-// Serverless: WaitReady -> fn (nothing to create or delete; Cloud Run scales
-// the instance down when the connection ends).
-func (c *Client) WithBrowser(ctx context.Context, opts CreateOptions, fn func(Browser) error) error {
-	if c.serverless {
-		b, err := c.WaitReady(ctx, "")
-		if err != nil {
-			return err
-		}
-		return fn(b)
-	}
+//	create -> WaitReady -> fn -> Delete
+//
+// It is the recommended way to use BrowserMesh for a scrape/task.
+func (c *BrowserMeshClient) WithBrowser(ctx context.Context, opts BrowserMeshOptions, fn func(Browser) error) error {
 	created, err := c.Create(ctx, opts)
 	if err != nil {
 		return err
