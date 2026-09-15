@@ -14,16 +14,6 @@ scalable platform primitive instead of a per-app headache.
  one browser  =  one isolated Pod  =  KasmVNC (video) + headed engine (CDP)
 ```
 
-BrowserMesh runs two ways:
-
-- **Kubernetes (full platform)** — a control plane + operator create, list, and
-  destroy browsers on demand, each with its own viewer URL. Best for multi-user
-  and long-lived setups.
-- **Serverless (Cloud Run)** — one container = one browser, deployed as a single
-  service. Scale-to-zero, pay only while connected, no cluster to run. Best for
-  **single-use / occasional automation** (a scrape, one agent run) at near-zero
-  cost. See [Serverless (Cloud Run)](#serverless-cloud-run--cheap-single-use-browsers).
-
 ## How it works
 
 ```
@@ -46,19 +36,15 @@ BrowserMesh runs two ways:
 | `control/` | The API + gateway (manage browsers, relay CDP/VNC) |
 | `infra/browser/` | The per-browser engine image (KasmVNC + a headed browser) |
 | `dashboard/` | The web UI (list, view, delete) |
-| `sdk/` | Go + Python clients (control-plane **and** serverless modes) |
-| `examples/` | Runnable demos (`raw_cdp.py`, browser-use agents) |
-| `deploy/` | Cloud Run deploy guide + live stats script |
-| `cloudbuild.yaml` | Cloud Build: build → push → deploy the browser image |
+| `sdk/` | Go + Python clients for the control plane |
+| `examples/` | Runnable demos (`raw_cdp.py`, browser-use agent) |
+| `deploy/` | Deployment guides (GKE, k3s) |
 | `commands.md` | Setup + change-cycle commands |
 | `architecture.md` | Plain-English design notes |
 
-## Quick start
+## Quick start (local, kind)
 
-See **[commands.md](./commands.md)** — it has the two things you'll run:
-**first-time setup** and the **normal change cycle**.
-
-High level:
+See **[commands.md](./commands.md)** for the details.
 
 ```bash
 # one command: clean cluster -> build -> load -> deploy -> smoke test
@@ -68,8 +54,7 @@ High level:
 cd dashboard && npm install && npm run dev     # http://localhost:4003
 ```
 
-`./stop.sh` tears the cluster down; `./stats.sh` shows live Cloud Run stats
-(see the serverless section below).
+`./stop.sh` tears the cluster down.
 
 ## Using it
 
@@ -83,61 +68,22 @@ cd dashboard && npm install && npm run dev     # http://localhost:4003
   ```
 - **SDK** (Go + Python):
   ```python
-  from browsermesh import Client, CreateOptions
-  client = Client("http://127.0.0.1:30080", "bmsk_...")
-  with client.with_browser(CreateOptions(type="cloak", timeout_seconds=300)) as b:
+  from browsermesh import BrowserMeshClient, BrowserMeshOptions
+  client = BrowserMeshClient("http://127.0.0.1:30080", "bmsk_...")
+  with client.with_browser(BrowserMeshOptions(type="cloak", timeout_seconds=300)) as b:
       print("drive:", client.cdp_url(b.id))
+      print("watch:", client.watch_url(b.id))
   ```
 
-## Serverless (Cloud Run) — cheap single-use browsers
+## Deploying
 
-For occasional, single-use work (one scrape, one agent run) a whole cluster is
-overkill. The **same `infra/browser` image** runs on Cloud Run as a single
-container with a built-in single-port gateway: **scale-to-zero**, pay only while
-a browser is connected, and the free tier covers ~50 browser-hours/month.
+BrowserMesh runs on any Kubernetes (the Pod is the unit). Guides:
 
-```
-one Cloud Run instance = one browser = noVNC viewer (/) + CDP (/json/version, /devtools)
-```
-
-Deploy — Cloud Build builds, pushes, and deploys in one step:
-
-```bash
-gcloud builds submit --config cloudbuild.yaml .
-```
-
-Use it with the SDK's **serverless mode** — no control plane, no API key needed
-for a public service:
-
-```python
-from browsermesh import Client
-with Client("https://<your-service>.run.app", serverless=True) as c:
-    with c.with_browser() as b:
-        print("watch:", b.vnc_url)   # https://<service>/watch  (live view)
-        print("drive:", b.cdp_url)   # wss://<service>/devtools/browser/<id>
-```
-
-Or run the ready-made agent:
-
-```bash
-cd examples
-BROWSERMESH_URL=https://<your-service>.run.app uv run python browser_use_serverless.py
-```
-
-How it's used here: one Cloud Run service, triggered on demand by a request,
-each connection getting its own isolated browser, used for single-shot
-automation and paid per second — no cluster, near-zero idle cost.
-
-Notes / limits:
-
-- **Watchable single-use mode.** Deploy with `--max-instances 1 --concurrency 10`
-  (the `cloudbuild.yaml` default) so the SDK's CDP connection and your viewer
-  share one instance — open `https://<service>/watch` to watch the browser being
-  driven. For isolated one-browser-per-connection instead, use
-  `--concurrency 1 --max-instances 5` (then you can't watch a specific browser).
-- 60-minute max per CDP/VNC WebSocket; cold start ~5–15s; scales to zero when idle.
-- Full guide: **[deploy/cloudrun.md](./deploy/cloudrun.md)**. Live instance count:
-  `./stats.sh` or `./deploy/instances.sh`.
+- **[deploy/gke.md](./deploy/gke.md)** — GKE **zonal Standard** with the free-tier
+  control plane + a **spot** browser node pool that scales to zero.
+- **[deploy/k3s.md](./deploy/k3s.md)** — the cheapest option: k3s on a single
+  small x86 VPS.
+- **[deploy/README.md](./deploy/README.md)** — cost levers and host comparison.
 
 ## Adding a browser engine
 
